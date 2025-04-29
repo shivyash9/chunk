@@ -1,43 +1,115 @@
 import * as React from "react";
 import PropTypes from "prop-types";
 import Header from "./Header";
-import HeroList from "./HeroList";
-import TextInsertion from "./TextInsertion";
 import { makeStyles } from "@fluentui/react-components";
-import { Ribbon24Regular, LockOpen24Regular, DesignIdeas24Regular } from "@fluentui/react-icons";
-import { insertText } from "../taskpane";
+import { Button, Text, List, ListItem } from "@fluentui/react-components";
+import { analyzeDocument, deleteContext } from "../wordService";
 
 const useStyles = makeStyles({
   root: {
     minHeight: "100vh",
+    padding: "1rem",
   },
+  buttonsContainer: {
+    display: "flex",
+    gap: "10px",
+    marginBottom: "20px",
+  },
+  button: {
+    minWidth: "120px",
+  },
+  listContainer: {
+    maxHeight: "400px",
+    overflowY: "auto",
+    border: "1px solid #e0e0e0",
+    marginTop: "10px",
+    padding: "10px",
+  },
+  listItem: {
+    marginBottom: "5px",
+    padding: "5px",
+    backgroundColor: "#f5f5f5",
+    borderRadius: "4px",
+    wordBreak: "break-word",
+  },
+  noElements: {
+    fontStyle: "italic",
+    color: "#666",
+    margin: "10px 0",
+  }
 });
 
 const App = (props) => {
   const { title } = props;
   const styles = useStyles();
-  // The list items are static and won't change at runtime,
-  // so this should be an ordinary const, not a part of state.
-  const listItems = [
-    {
-      icon: <Ribbon24Regular />,
-      primaryText: "Achieve more with Office integration",
-    },
-    {
-      icon: <LockOpen24Regular />,
-      primaryText: "Unlock features and functionality",
-    },
-    {
-      icon: <DesignIdeas24Regular />,
-      primaryText: "Create and visualize like a pro",
-    },
-  ];
+  const [contentControls, setContentControls] = React.useState([]);
+  const [isProcessing, setIsProcessing] = React.useState(false);
+
+  const handleAnalyzeDocument = async () => {
+    try {
+      setIsProcessing(true);
+      const controls = await analyzeDocument();
+      setContentControls(controls);
+    } catch (error) {
+      console.error("Error in handleAnalyzeDocument:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteContext = async () => {
+    try {
+      setIsProcessing(true);
+      await deleteContext();
+      setContentControls([]);
+    } catch (error) {
+      console.error("Error in handleDeleteContext:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <div className={styles.root}>
-      <Header logo="assets/logo-filled.png" title={title} message="Welcome" />
-      <HeroList message="Discover what this add-in can do for you today!" items={listItems} />
-      <TextInsertion insertText={insertText} />
+      <Header logo="assets/logo-filled.png" title={title} message="Document Analysis Tool" />
+      
+      <div className={styles.buttonsContainer}>
+        <Button 
+          className={styles.button}
+          appearance="primary" 
+          onClick={handleAnalyzeDocument}
+          disabled={isProcessing}
+        >
+          Analyse Document
+        </Button>
+        
+        <Button 
+          className={styles.button}
+          onClick={handleDeleteContext}
+          disabled={isProcessing}
+        >
+          Delete Context
+        </Button>
+      </div>
+      
+      <Text size={500} weight="semibold">Document Elements ({contentControls.length})</Text>
+      
+      {contentControls.length > 0 ? (
+        <div className={styles.listContainer}>
+          <List>
+            {contentControls.map((item) => (
+              <ListItem key={item.id} className={styles.listItem}>
+                <div>
+                  <Text weight="semibold">{item.title}: {item.id}</Text>
+                  <Text block>{item.text}</Text>
+                </div>
+              </ListItem>
+            ))}
+          </List>
+        </div>
+      ) : (
+        <Text className={styles.noElements}>No analyzed elements yet. Click 'Analyse Document' to begin.</Text>
+      )}
     </div>
   );
 };

@@ -1,21 +1,25 @@
 import * as React from "react";
 import PropTypes from "prop-types";
-import { Image, tokens, makeStyles } from "@fluentui/react-components";
+import { Image, Text, makeStyles } from "@fluentui/react-components";
 
 const useStyles = makeStyles({
-  welcome__header: {
+  header: {
     display: "flex",
-    flexDirection: "column",
     alignItems: "center",
-    paddingBottom: "30px",
-    paddingTop: "100px",
-    backgroundColor: tokens.colorNeutralBackground3,
+    gap: "10px",
+    paddingBottom: "15px",
+    marginBottom: "15px",
+    borderBottom: "1px solid #e0e0e0",
   },
-  message: {
-    fontSize: tokens.fontSizeHero900,
-    fontWeight: tokens.fontWeightRegular,
-    fontColor: tokens.colorNeutralBackgroundStatic,
+  title: {
+    margin: 0,
+    fontSize: "20px",
+    fontWeight: "600",
   },
+  logo: {
+    width: "32px",
+    height: "32px",
+  }
 });
 
 const Header = (props) => {
@@ -23,10 +27,13 @@ const Header = (props) => {
   const styles = useStyles();
 
   return (
-    <section className={styles.welcome__header}>
-      <Image width="90" height="90" src={logo} alt={title} />
-      <h1 className={styles.message}>{message}</h1>
-    </section>
+    <div className={styles.header}>
+      <Image className={styles.logo} src={logo} alt={title} />
+      <div>
+        <h1 className={styles.title}>{message}</h1>
+        <Text size={200}>{title}</Text>
+      </div>
+    </div>
   );
 };
 
