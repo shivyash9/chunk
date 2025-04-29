@@ -55,9 +55,24 @@ const useStyles = makeStyles({
     margin: "0 0 12px 0",
   },
   listContainer: {
-    maxHeight: "350px",
+    maxHeight: "calc(100vh - 200px)",
+    minHeight: "200px",
     overflowY: "auto",
     ...shorthands.borderRadius("4px"),
+    scrollBehavior: "smooth",
+    "&::-webkit-scrollbar": {
+      width: "8px",
+    },
+    "&::-webkit-scrollbar-track": {
+      background: tokens.colorNeutralBackground1,
+    },
+    "&::-webkit-scrollbar-thumb": {
+      background: tokens.colorNeutralStroke1,
+      ...shorthands.borderRadius("4px"),
+      "&:hover": {
+        background: tokens.colorNeutralStroke2,
+      },
+    },
   },
   listItem: {
     ...shorthands.margin("0", "0", "8px", "0"),
