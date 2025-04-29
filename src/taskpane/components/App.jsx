@@ -3,55 +3,139 @@
 import * as React from "react";
 import PropTypes from "prop-types";
 import Header from "./Header";
-import { makeStyles } from "@fluentui/react-components";
-import { Button, Text, List, ListItem, Dialog, DialogSurface, 
-  DialogBody, DialogTitle, DialogContent, DialogActions, Textarea, Field, Input } from "@fluentui/react-components";
+import { makeStyles, tokens, shorthands } from "@fluentui/react-components";
+import { 
+  Button, Text, List, ListItem, Dialog, DialogSurface, 
+  DialogBody, DialogTitle, DialogContent, DialogActions, Textarea, Field, Input,
+  Card, CardHeader, CardFooter, Divider, TabList, Tab, Badge, Spinner
+} from "@fluentui/react-components";
 import { analyzeDocument, deleteContext, selectContentControlById, insertParagraphAfter, deleteContentControlById, replaceParagraphContent, addCommentToParagraph } from "../wordService";
-import { AddRegular, DeleteRegular, EditRegular, CommentRegular } from "@fluentui/react-icons";
+import { 
+  AddRegular, 
+  DeleteRegular, 
+  EditRegular, 
+  CommentRegular,
+  DocumentSearchRegular,
+  DeleteDismissRegular,
+  ArrowSyncRegular,
+  DocumentBulletListRegular,
+  ArrowForwardRegular,
+  SearchRegular
+} from "@fluentui/react-icons";
 
 const useStyles = makeStyles({
   root: {
     minHeight: "100vh",
-    padding: "1rem",
+    ...shorthands.padding("0"),
+    backgroundColor: tokens.colorNeutralBackground1,
+    display: "flex",
+    flexDirection: "column",
+  },
+  contentArea: {
+    display: "flex",
+    flexDirection: "column",
+    ...shorthands.gap("16px"),
+    ...shorthands.padding("16px"),
+    flex: 1,
+    overflowY: "auto",
   },
   buttonsContainer: {
     display: "flex",
-    gap: "10px",
-    marginBottom: "20px",
+    ...shorthands.gap("8px"),
+    marginBottom: "16px",
   },
-  button: {
-    minWidth: "120px",
+  actionButton: {
+    minWidth: "auto",
+    flex: 1,
+  },
+  card: {
+    ...shorthands.margin("0", "0", "16px", "0"),
+  },
+  paragraph: {
+    margin: "0 0 12px 0",
   },
   listContainer: {
-    maxHeight: "400px",
+    maxHeight: "350px",
     overflowY: "auto",
-    border: "1px solid #e0e0e0",
-    marginTop: "10px",
-    padding: "10px",
+    ...shorthands.borderRadius("4px"),
   },
   listItem: {
-    marginBottom: "5px",
-    padding: "5px",
-    backgroundColor: "#f5f5f5",
-    borderRadius: "4px",
+    ...shorthands.margin("0", "0", "8px", "0"),
+    ...shorthands.padding("12px"),
+    backgroundColor: tokens.colorNeutralBackground1,
+    ...shorthands.borderRadius("4px"),
+    ...shorthands.border("1px", "solid", tokens.colorNeutralStroke1),
     wordBreak: "break-word",
     cursor: "pointer",
-    transition: "background-color 0.2s",
+    transition: "all 0.2s ease",
     "&:hover": {
-      backgroundColor: "#e0e0e0",
+      backgroundColor: tokens.colorNeutralBackground2,
+      ...shorthands.borderColor(tokens.colorBrandBackground),
     },
   },
   activeItem: {
-    backgroundColor: "#d1e8ff",
+    backgroundColor: tokens.colorBrandBackground2,
+    ...shorthands.borderColor(tokens.colorBrandBackground),
     "&:hover": {
-      backgroundColor: "#c0e0ff",
+      backgroundColor: tokens.colorBrandBackground2,
     },
   },
   noElements: {
     fontStyle: "italic",
-    color: "#666",
-    margin: "10px 0",
-  }
+    color: tokens.colorNeutralForeground3,
+    ...shorthands.margin("24px", "0"),
+    textAlign: "center",
+  },
+  listItemContent: {
+    width: '100%', 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    alignItems: 'flex-start',
+  },
+  listItemActions: {
+    display: 'flex', 
+    ...shorthands.gap('4px'),
+    marginLeft: '8px',
+  },
+  searchInput: {
+    flexGrow: 1,
+  },
+  searchSection: {
+    ...shorthands.padding("16px"),
+    backgroundColor: tokens.colorNeutralBackground2,
+    ...shorthands.borderRadius("6px"),
+    ...shorthands.margin("0", "0", "16px", "0"),
+  },
+  tabContent: {
+    ...shorthands.padding("16px", "0", "0", "0"),
+  },
+  badge: {
+    marginLeft: "8px",
+  },
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(255, 255, 255, 0.7)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+  },
+  spinnerContainer: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    ...shorthands.gap("12px"),
+  },
+  ellipsis: {
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "180px",
+  },
 });
 
 const App = (props) => {
@@ -63,57 +147,81 @@ const App = (props) => {
   const [insertText, setInsertText] = React.useState("");
   const [showInsertDialog, setShowInsertDialog] = React.useState(false);
   const [currentInsertId, setCurrentInsertId] = React.useState(null);
+  const [analysisTime, setAnalysisTime] = React.useState(0);
   
-  // New state variables for paragraph ID search functionality
+  // State variables for paragraph ID search functionality
   const [searchParaId, setSearchParaId] = React.useState("");
   const [showReplaceDialog, setShowReplaceDialog] = React.useState(false);
   const [showCommentDialog, setShowCommentDialog] = React.useState(false);
   const [replaceText, setReplaceText] = React.useState("");
   const [commentText, setCommentText] = React.useState("");
+  
+  // Tab state
+  const [selectedTab, setSelectedTab] = React.useState("paragraphs");
+  const [processingMessage, setProcessingMessage] = React.useState("");
 
   const handleAnalyzeDocument = async () => {
     try {
       setIsProcessing(true);
+      setProcessingMessage("Analyzing document...");
+      const startTime = performance.now();
       
-      // First, delete existing context
-      await deleteContext();
+      // First, try to delete existing context
+      try {
+        await deleteContext();
+      } catch (deleteError) {
+        console.warn("Warning: Could not completely clear previous context:", deleteError);
+        // Continue with analysis even if context deletion fails
+      }
       
       // Then analyze the document
       const controls = await analyzeDocument();
       setContentControls(controls);
+      
+      const endTime = performance.now();
+      setAnalysisTime((endTime - startTime) / 1000); // Convert to seconds
     } catch (error) {
       console.error("Error in handleAnalyzeDocument:", error);
+      // Show an error message to the user
+      setProcessingMessage("Analysis failed. Please try again or reload the add-in.");
+      setTimeout(() => setProcessingMessage(""), 5000); // Clear message after 5 seconds
     } finally {
       setIsProcessing(false);
+      if (processingMessage === "Analyzing document...") {
+        setProcessingMessage("");
+      }
     }
   };
 
   const handleDeleteContext = async () => {
     try {
       setIsProcessing(true);
+      setProcessingMessage("Clearing context...");
       await deleteContext();
       setContentControls([]);
       setActiveItemId(null);
     } catch (error) {
       console.error("Error in handleDeleteContext:", error);
+      // Show an error message to the user
+      setProcessingMessage("Clearing failed. Please try again or reload the add-in.");
+      setTimeout(() => setProcessingMessage(""), 5000); // Clear message after 5 seconds
     } finally {
       setIsProcessing(false);
+      if (processingMessage === "Clearing context...") {
+        setProcessingMessage("");
+      }
     }
   };
   
   const handleItemClick = async (itemId) => {
     try {
-      setIsProcessing(true);
       const success = await selectContentControlById(itemId);
       if (success) {
         setActiveItemId(itemId);
-        // Auto-populate the search input field with the selected item's ID
         setSearchParaId(itemId);
       }
     } catch (error) {
       console.error("Error selecting content control:", error);
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -126,6 +234,7 @@ const App = (props) => {
   const handleInsertConfirm = async () => {
     try {
       setIsProcessing(true);
+      setProcessingMessage("Inserting paragraph...");
       const result = await insertParagraphAfter(currentInsertId, insertText);
       
       if (result.success) {
@@ -141,12 +250,14 @@ const App = (props) => {
       console.error("Error inserting paragraph:", error);
     } finally {
       setIsProcessing(false);
+      setProcessingMessage("");
     }
   };
 
   const handleDeleteItem = async (itemId) => {
     try {
       setIsProcessing(true);
+      setProcessingMessage("Deleting paragraph...");
       const success = await deleteContentControlById(itemId);
       
       if (success) {
@@ -157,6 +268,7 @@ const App = (props) => {
       console.error("Error deleting content control:", error);
     } finally {
       setIsProcessing(false);
+      setProcessingMessage("");
     }
   };
 
@@ -164,22 +276,14 @@ const App = (props) => {
     if (!searchParaId.trim()) return;
     
     try {
-      setIsProcessing(true);
-      // First try to select the paragraph to verify it exists
       const success = await selectContentControlById(searchParaId);
-      
       if (success) {
         setActiveItemId(searchParaId);
         setReplaceText("");
         setShowReplaceDialog(true);
-      } else {
-        console.log("Paragraph ID not found");
-        // Could add a notification here that the ID was not found
       }
     } catch (error) {
       console.error("Error finding paragraph:", error);
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -187,28 +291,21 @@ const App = (props) => {
     if (!searchParaId.trim()) return;
     
     try {
-      setIsProcessing(true);
-      // First try to select the paragraph to verify it exists
       const success = await selectContentControlById(searchParaId);
-      
       if (success) {
         setActiveItemId(searchParaId);
         setCommentText("");
         setShowCommentDialog(true);
-      } else {
-        console.log("Paragraph ID not found");
-        // Could add a notification here that the ID was not found
       }
     } catch (error) {
       console.error("Error finding paragraph:", error);
-    } finally {
-      setIsProcessing(false);
     }
   };
 
   const handleReplaceConfirm = async () => {
     try {
       setIsProcessing(true);
+      setProcessingMessage("Replacing content...");
       const success = await replaceParagraphContent(searchParaId, replaceText);
       
       if (success) {
@@ -224,12 +321,14 @@ const App = (props) => {
       console.error("Error replacing paragraph content:", error);
     } finally {
       setIsProcessing(false);
+      setProcessingMessage("");
     }
   };
 
   const handleCommentConfirm = async () => {
     try {
       setIsProcessing(true);
+      setProcessingMessage("Adding comment...");
       const success = await addCommentToParagraph(searchParaId, commentText);
       
       if (success) {
@@ -240,114 +339,157 @@ const App = (props) => {
       console.error("Error adding comment:", error);
     } finally {
       setIsProcessing(false);
+      setProcessingMessage("");
     }
   };
 
   return (
     <div className={styles.root}>
-      <Header logo="assets/logo-filled.png" title={title} message="Document Analysis Tool" />
+      <Header 
+        logo="assets/logo-filled.png" 
+        title={title} 
+        message={processingMessage || "Pramata Document Analyser"}
+        onClear={handleDeleteContext}
+        onAnalyse={handleAnalyzeDocument}
+        isProcessing={isProcessing}
+        analysisTime={analysisTime}
+      />
       
-      <div className={styles.buttonsContainer}>
-        <Button 
-          className={styles.button}
-          appearance="primary" 
-          onClick={handleAnalyzeDocument}
-          disabled={isProcessing}
-        >
-          Analyse Document
-        </Button>
-        
-        <Button 
-          className={styles.button}
-          onClick={handleDeleteContext}
-          disabled={isProcessing}
-        >
-          Delete Context
-        </Button>
-      </div>
-      
-      {/* New section for paragraph ID search and modification */}
-      <div style={{ marginBottom: "20px", padding: "15px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>
-        <Text size={500} weight="semibold" block style={{ marginBottom: "10px" }}>
-          Search and Modify by Paragraph ID
-        </Text>
-        
-        <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
-          <Input 
-            placeholder="Enter paragraph ID" 
-            value={searchParaId}
-            onChange={(e) => setSearchParaId(e.target.value)}
-            style={{ flexGrow: 1 }}
-          />
+      {isProcessing && (
+        <div className={styles.loadingOverlay}>
+          <div className={styles.spinnerContainer}>
+            <Spinner size="medium" />
+            <Text weight="semibold">{processingMessage}</Text>
+          </div>
         </div>
-        
-        <div style={{ display: "flex", gap: "10px" }}>
-          <Button 
-            icon={<EditRegular />}
-            onClick={handleReplaceContent}
-            disabled={isProcessing || !searchParaId.trim()}
-          >
-            Replace Content
-          </Button>
-          <Button 
-            icon={<CommentRegular />}
-            onClick={handleAddComment}
-            disabled={isProcessing || !searchParaId.trim()}
-          >
-            Add Comment
-          </Button>
-        </div>
-      </div>
-      
-      <Text size={500} weight="semibold">Document Elements ({contentControls.length})</Text>
-      
-      {contentControls.length > 0 ? (
-        <div className={styles.listContainer}>
-          <List>
-            {contentControls.map((item) => (
-              <React.Fragment key={item.id}>
-                <ListItem 
-                  className={`${styles.listItem} ${activeItemId === item.id ? styles.activeItem : ''}`}
-                  onClick={() => handleItemClick(item.id)}
-                >
-                  <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <Text weight="semibold">{item.title}: {item.id}</Text>
-                      <Text block>{item.text}</Text>
-                    </div>
-                    <div style={{ display: 'flex', gap: '5px' }}>
-                      <Button 
-                        icon={<AddRegular />}
-                        appearance="transparent"
-                        size="small" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleInsertAfter(item.id);
-                        }}
-                        disabled={isProcessing}
-                        title="Insert after"
-                      />
-                      <Button 
-                        icon={<DeleteRegular />}
-                        appearance="transparent"
-                        size="small" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteItem(item.id);
-                        }}
-                        disabled={isProcessing}
-                        title="Delete paragraph"
-                      />
-                    </div>
-                  </div>
-                </ListItem>
-              </React.Fragment>
-            ))}
-          </List>
-        </div>
-      ) : (
-        <Text className={styles.noElements}>No analyzed elements yet. Click 'Analyse Document' to begin.</Text>
       )}
+      
+      <div className={styles.contentArea}>
+        <TabList 
+          selectedValue={selectedTab}
+          onTabSelect={(_, data) => setSelectedTab(data.value)}
+          appearance="subtle"
+        >
+          <Tab value="paragraphs" icon={<DocumentBulletListRegular />}>
+            Paragraphs
+            {contentControls.length > 0 && (
+              <Badge appearance="filled" className={styles.badge} size="small" color="brand">
+                {contentControls.length}
+              </Badge>
+            )}
+          </Tab>
+          <Tab value="actions" icon={<SearchRegular />}>
+            Quick Actions
+          </Tab>
+        </TabList>
+
+        {selectedTab === "paragraphs" ? (
+          <div className={styles.tabContent}>
+            {contentControls.length > 0 ? (
+              <div className={styles.listContainer}>
+                <List>
+                  {contentControls.map((item) => (
+                    <ListItem 
+                      key={item.id}
+                      className={`${styles.listItem} ${activeItemId === item.id ? styles.activeItem : ''}`}
+                      onClick={() => handleItemClick(item.id)}
+                    >
+                      <div className={styles.listItemContent}>
+                        <div>
+                          <Text weight="semibold" size={200} className={styles.ellipsis}>
+                            {item.title}: {item.id}
+                          </Text>
+                          <Text block size={300}>{item.text}</Text>
+                        </div>
+                        <div className={styles.listItemActions}>
+                          <Button 
+                            icon={<AddRegular />}
+                            appearance="subtle"
+                            size="small" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleInsertAfter(item.id);
+                            }}
+                            disabled={isProcessing}
+                            title="Insert after"
+                          />
+                          <Button 
+                            icon={<DeleteRegular />}
+                            appearance="subtle"
+                            size="small" 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteItem(item.id);
+                            }}
+                            disabled={isProcessing}
+                            title="Delete paragraph"
+                          />
+                        </div>
+                      </div>
+                    </ListItem>
+                  ))}
+                </List>
+              </div>
+            ) : (
+              <div>
+                <Text className={styles.noElements}>
+                  No analyzed elements yet. Click 'Analyse' to begin.
+                </Text>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className={styles.tabContent}>
+            <Card className={styles.card}>
+              <CardHeader 
+                header={<Text weight="semibold">Quick Actions</Text>}
+              />
+              <CardFooter>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <Input 
+                      className={styles.searchInput}
+                      placeholder="Enter paragraph ID" 
+                      value={searchParaId}
+                      onChange={(e) => setSearchParaId(e.target.value)}
+                      contentBefore={<DocumentSearchRegular />}
+                    />
+                    <Button 
+                      icon={<ArrowForwardRegular />}
+                      onClick={() => handleItemClick(searchParaId)}
+                      disabled={isProcessing || !searchParaId.trim()}
+                      title="Find paragraph"
+                    />
+                  </div>
+                  
+                  <Divider />
+                  
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <Button 
+                      icon={<EditRegular />}
+                      onClick={handleReplaceContent}
+                      disabled={isProcessing || !searchParaId.trim()}
+                      title="Replace content"
+                      className={styles.actionButton}
+                    >
+                      Replace
+                    </Button>
+                    <Button 
+                      icon={<CommentRegular />}
+                      onClick={handleAddComment}
+                      disabled={isProcessing || !searchParaId.trim()}
+                      title="Add comment"
+                      className={styles.actionButton}
+                    >
+                      Comment
+                    </Button>
+                  </div>
+                </div>
+              </CardFooter>
+            </Card>
+          </div>
+        )}
+      </div>
 
       <Dialog open={showInsertDialog}>
         <DialogSurface>
@@ -372,7 +514,6 @@ const App = (props) => {
         </DialogSurface>
       </Dialog>
       
-      {/* Add new dialogs for Replace and Comment */}
       <Dialog open={showReplaceDialog}>
         <DialogSurface>
           <DialogBody>

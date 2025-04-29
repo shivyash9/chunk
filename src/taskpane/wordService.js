@@ -189,33 +189,62 @@ export async function deleteContext() {
       const contentControls = context.document.contentControls;
       const document = context.document;
       
+      // Load content controls and their tags
+      contentControls.load("items");
+      contentControls.load("tag");
+      
       // Store the current change tracking mode
       document.load("changeTrackingMode");
-      contentControls.load("tag");
       
       await context.sync();
       
       console.log(`Deleting ${contentControls.items.length} content controls`);
       
+      if (contentControls.items.length === 0) {
+        // No content controls to delete
+        return;
+      }
+      
       // Save the current tracking mode
       const originalTrackingMode = document.changeTrackingMode;
       
-      // Temporarily turn off change tracking for content control deletion
-      document.changeTrackingMode = "Off";
-      await context.sync();
-      
-      // Delete all content controls but preserve their content
-      for (let i = 0; i < contentControls.items.length; i++) {
-        contentControls.items[i].delete(true); // true = keep content
+      try {
+        // Temporarily turn off change tracking for content control deletion
+        document.changeTrackingMode = "Off";
+        await context.sync();
+        
+        // Delete content controls in batches to avoid timeout issues
+        const batchSize = 10;
+        for (let i = 0; i < contentControls.items.length; i += batchSize) {
+          const batch = contentControls.items.slice(i, Math.min(i + batchSize, contentControls.items.length));
+          
+          for (let j = 0; j < batch.length; j++) {
+            try {
+              // Delete control but preserve content
+              batch[j].delete(true);
+            } catch (controlError) {
+              console.warn(`Could not delete content control: ${controlError.message}`);
+              // Continue with other controls even if one fails
+            }
+          }
+          
+          // Sync after each batch
+          await context.sync();
+        }
+      } finally {
+        try {
+          // Restore the original tracking mode regardless of success or failure
+          document.changeTrackingMode = originalTrackingMode;
+          await context.sync();
+        } catch (restoreError) {
+          console.warn("Could not restore tracking mode:", restoreError);
+        }
       }
-      
-      // Restore the original tracking mode
-      document.changeTrackingMode = originalTrackingMode;
-      await context.sync();
     });
   } catch (error) {
     console.error("Error deleting context:", error);
-    throw error;
+    // Don't throw the error - it's ok if we can't delete everything
+    // This prevents the error from bubbling up and affecting the UI
   }
 }
 
