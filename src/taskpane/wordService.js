@@ -367,4 +367,93 @@ export async function deleteContentControlById(tagId) {
     console.error("Error deleting content control:", error);
     return false;
   }
+}
+
+/**
+ * Replaces the content of a paragraph with new content by its ID
+ * @param {string} paraId - The ID of the paragraph to replace content for
+ * @param {string} newContent - The new content to replace with
+ * @returns {Promise<boolean>} - True if successfully replaced, false otherwise
+ */
+export async function replaceParagraphContent(paraId, newContent) {
+  try {
+    let success = false;
+    
+    await Word.run(async (context) => {
+      // First, make sure track changes is enabled
+      const document = context.document;
+      document.changeTrackingMode = "TrackAll";
+      
+      // Get all content controls in the document
+      const contentControls = context.document.contentControls;
+      contentControls.load("tag, text");
+      
+      await context.sync();
+      
+      // Find the content control with the matching tag
+      for (let i = 0; i < contentControls.items.length; i++) {
+        if (contentControls.items[i].tag === paraId) {
+          // Get the content control's range
+          const contentControl = contentControls.items[i];
+          
+          // Set the text directly in the content control
+          contentControl.insertText(newContent, Word.InsertLocation.replace);
+          
+          // Update the title to show it was modified
+          contentControl.title = `paragraph (modified)`;
+          
+          success = true;
+          break;
+        }
+      }
+      
+      await context.sync();
+    });
+    
+    return success;
+  } catch (error) {
+    console.error("Error replacing paragraph content:", error);
+    return false;
+  }
+}
+
+/**
+ * Adds a comment to a paragraph by its ID
+ * @param {string} paraId - The ID of the paragraph to add a comment to
+ * @param {string} commentText - The text of the comment to add
+ * @returns {Promise<boolean>} - True if successfully added comment, false otherwise
+ */
+export async function addCommentToParagraph(paraId, commentText) {
+  try {
+    let success = false;
+    
+    await Word.run(async (context) => {
+      // Get all content controls in the document
+      const contentControls = context.document.contentControls;
+      contentControls.load("tag");
+      
+      await context.sync();
+      
+      // Find the content control with the matching tag
+      for (let i = 0; i < contentControls.items.length; i++) {
+        if (contentControls.items[i].tag === paraId) {
+          // Get the range to add a comment to
+          const range = contentControls.items[i].getRange();
+          
+          // Add a comment to the range
+          range.insertComment(commentText);
+          
+          success = true;
+          break;
+        }
+      }
+      
+      await context.sync();
+    });
+    
+    return success;
+  } catch (error) {
+    console.error("Error adding comment to paragraph:", error);
+    return false;
+  }
 } 
