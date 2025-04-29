@@ -48,6 +48,11 @@ const App = (props) => {
   const handleAnalyzeDocument = async () => {
     try {
       setIsProcessing(true);
+      
+      // First, delete existing context
+      await deleteContext();
+      
+      // Then analyze the document
       const controls = await analyzeDocument();
       setContentControls(controls);
     } catch (error) {
