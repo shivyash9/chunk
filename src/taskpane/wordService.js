@@ -20,50 +20,65 @@ export async function analyzeDocument() {
       
       await context.sync();
       
+      console.log(`Total paragraphs found: ${paragraphs.items.length}`);
+      console.log(`Total tables found: ${tables.items.length}`);
+      
       let paragraphCounter = 1;
       let tableCounter = 1;
+      let skippedTableParagraphs = 0;
+      let skippedEmptyParagraphs = 0;
+      let paragraphsWithControls = 0;
       
       // Process paragraphs (excluding those in tables)
       for (let i = 0; i < paragraphs.items.length; i++) {
         const paragraph = paragraphs.items[i];
-        // Skip if paragraph is inside a table
-        if (paragraph.parentTableOrNullObject.isNullObject) {
-          // Skip empty paragraphs or those with default placeholder text
-          if (!paragraph.text || paragraph.text.trim() === "" || paragraph.text === "Click or tap here to enter text.") {
+        try {
+          // Skip if paragraph is inside a table
+          if (!paragraph.parentTableOrNullObject.isNullObject) {
+            skippedTableParagraphs++;
             continue;
           }
           
-          // Check if already has a content control
-          paragraph.contentControls.load("tag");
-          await context.sync();
-          
-          if (paragraph.contentControls.items.length === 0) {
-            const uniqueId = `para-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-            const contentControl = paragraph.insertContentControl();
-            contentControl.tag = uniqueId;
-            contentControl.title = `paragraph ${paragraphCounter}`;
-            
-            controls.push({
-              id: uniqueId,
-              text: paragraph.text,
-              type: "paragraph",
-              index: i, // Save the original position
-              title: `paragraph ${paragraphCounter}`
-            });
-            
-            paragraphCounter++;
+          // Skip empty paragraphs or those with default placeholder text
+          if (!paragraph.text || paragraph.text.trim() === "" || paragraph.text === "Click or tap here to enter text.") {
+            skippedEmptyParagraphs++;
+            continue;
           }
+          
+          // Insert a content control regardless of whether it already has one
+          const uniqueId = `para-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          const contentControl = paragraph.insertContentControl();
+          contentControl.tag = uniqueId;
+          contentControl.title = `paragraph ${paragraphCounter}`;
+          
+          controls.push({
+            id: uniqueId,
+            text: paragraph.text,
+            type: "paragraph",
+            index: i, // Save the original position
+            title: `paragraph ${paragraphCounter}`
+          });
+          
+          paragraphCounter++;
+          paragraphsWithControls++;
+          // console.log(`Added control to paragraph ${i+1}: "${paragraph.text.substring(0, 30)}${paragraph.text.length > 30 ? '...' : ''}"`);
+        } catch (error) {
+          console.error(`Error processing paragraph ${i+1}:`, error);
         }
       }
+      
+      console.log(`Paragraphs skipped (in tables): ${skippedTableParagraphs}`);
+      console.log(`Paragraphs skipped (empty/placeholder): ${skippedEmptyParagraphs}`);
+      console.log(`Paragraphs with content controls: ${paragraphsWithControls}`);
+      
+      let tablesWithControls = 0;
       
       // Process tables
       for (let i = 0; i < tables.items.length; i++) {
         const table = tables.items[i];
-        // Check if the table already has a content control
-        table.contentControls.load("tag");
-        await context.sync();
         
-        if (table.contentControls.items.length === 0) {
+        try {
+          // Create a content control for the table
           const uniqueId = `table-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
           const contentControl = table.insertContentControl();
           contentControl.tag = uniqueId;
@@ -87,8 +102,14 @@ export async function analyzeDocument() {
           });
           
           tableCounter++;
+          tablesWithControls++;
+          // console.log(`Added control to table ${i+1}`);
+        } catch (error) {
+          console.error(`Error processing table ${i+1}:`, error);
         }
       }
+      
+      console.log(`Tables with content controls: ${tablesWithControls}`);
       
       await context.sync();
       
@@ -117,6 +138,8 @@ export async function deleteContext() {
       contentControls.load("tag");
       
       await context.sync();
+      
+      console.log(`Deleting ${contentControls.items.length} content controls`);
       
       // Delete all content controls but preserve their content
       for (let i = 0; i < contentControls.items.length; i++) {
