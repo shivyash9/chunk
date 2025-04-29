@@ -3,7 +3,7 @@ import PropTypes from "prop-types";
 import Header from "./Header";
 import { makeStyles } from "@fluentui/react-components";
 import { Button, Text, List, ListItem } from "@fluentui/react-components";
-import { analyzeDocument, deleteContext } from "../wordService";
+import { analyzeDocument, deleteContext, selectContentControlById } from "../wordService";
 
 const useStyles = makeStyles({
   root: {
@@ -31,6 +31,17 @@ const useStyles = makeStyles({
     backgroundColor: "#f5f5f5",
     borderRadius: "4px",
     wordBreak: "break-word",
+    cursor: "pointer",
+    transition: "background-color 0.2s",
+    "&:hover": {
+      backgroundColor: "#e0e0e0",
+    },
+  },
+  activeItem: {
+    backgroundColor: "#d1e8ff",
+    "&:hover": {
+      backgroundColor: "#c0e0ff",
+    },
   },
   noElements: {
     fontStyle: "italic",
@@ -44,6 +55,7 @@ const App = (props) => {
   const styles = useStyles();
   const [contentControls, setContentControls] = React.useState([]);
   const [isProcessing, setIsProcessing] = React.useState(false);
+  const [activeItemId, setActiveItemId] = React.useState(null);
 
   const handleAnalyzeDocument = async () => {
     try {
@@ -67,8 +79,23 @@ const App = (props) => {
       setIsProcessing(true);
       await deleteContext();
       setContentControls([]);
+      setActiveItemId(null);
     } catch (error) {
       console.error("Error in handleDeleteContext:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+  
+  const handleItemClick = async (itemId) => {
+    try {
+      setIsProcessing(true);
+      const success = await selectContentControlById(itemId);
+      if (success) {
+        setActiveItemId(itemId);
+      }
+    } catch (error) {
+      console.error("Error selecting content control:", error);
     } finally {
       setIsProcessing(false);
     }
@@ -103,7 +130,11 @@ const App = (props) => {
         <div className={styles.listContainer}>
           <List>
             {contentControls.map((item) => (
-              <ListItem key={item.id} className={styles.listItem}>
+              <ListItem 
+                key={item.id} 
+                className={`${styles.listItem} ${activeItemId === item.id ? styles.activeItem : ''}`}
+                onClick={() => handleItemClick(item.id)}
+              >
                 <div>
                   <Text weight="semibold">{item.title}: {item.id}</Text>
                   <Text block>{item.text}</Text>

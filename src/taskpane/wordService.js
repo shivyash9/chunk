@@ -152,4 +152,40 @@ export async function deleteContext() {
     console.error("Error deleting context:", error);
     throw error;
   }
+}
+
+/**
+ * Scrolls to and selects a content control by its tag ID
+ * @param {string} tagId - The tag ID of the content control to select
+ * @returns {Promise<boolean>} - True if successful, false if not found
+ */
+export async function selectContentControlById(tagId) {
+  try {
+    let found = false;
+    
+    await Word.run(async (context) => {
+      // Get all content controls in the document
+      const contentControls = context.document.contentControls;
+      contentControls.load("tag");
+      
+      await context.sync();
+      
+      // Find the content control with the matching tag
+      for (let i = 0; i < contentControls.items.length; i++) {
+        if (contentControls.items[i].tag === tagId) {
+          // Select the content control - this automatically scrolls it into view
+          contentControls.items[i].select();
+          found = true;
+          break;
+        }
+      }
+      
+      await context.sync();
+    });
+    
+    return found;
+  } catch (error) {
+    console.error("Error selecting content control:", error);
+    return false;
+  }
 } 
