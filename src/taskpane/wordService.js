@@ -14,20 +14,51 @@ export async function analyzeDocument() {
       const contentItems = body.contentControls;
       const paragraphs = body.paragraphs;
       const tables = body.tables;
+      const document = context.document;
       
+      // Store the current change tracking mode
+      document.load("changeTrackingMode");
       paragraphs.load("text, parentTableOrNullObject");
+      contentItems.load("tag, title, text");
       tables.load("values");
       
       await context.sync();
       
+      // Save the current tracking mode
+      const originalTrackingMode = document.changeTrackingMode;
+      
+      // Temporarily turn off change tracking for our content control operations
+      document.changeTrackingMode = "Off";
+      await context.sync();
+      
       console.log(`Total paragraphs found: ${paragraphs.items.length}`);
       console.log(`Total tables found: ${tables.items.length}`);
+      console.log(`Total content controls found: ${contentItems.items.length}`);
       
       let paragraphCounter = 1;
       let tableCounter = 1;
       let skippedTableParagraphs = 0;
       let skippedEmptyParagraphs = 0;
       let paragraphsWithControls = 0;
+      
+      // Check for existing content controls first and preserve them in our control list
+      const existingControlTags = new Set();
+      for (let i = 0; i < contentItems.items.length; i++) {
+        const control = contentItems.items[i];
+        existingControlTags.add(control.tag);
+        
+        // If it's an inserted paragraph (has the right title format), preserve it
+        if (control.title && control.title.includes("paragraph (inserted)")) {
+          controls.push({
+            id: control.tag,
+            text: control.text,
+            type: "paragraph",
+            index: i, // This will be corrected later
+            title: control.title
+          });
+          paragraphsWithControls++;
+        }
+      }
       
       // Process paragraphs (excluding those in tables)
       for (let i = 0; i < paragraphs.items.length; i++) {
@@ -45,9 +76,9 @@ export async function analyzeDocument() {
             continue;
           }
           
-          // Insert a content control regardless of whether it already has one
+          // Insert a content control only if there isn't one already
           const uniqueId = `para-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-          const contentControl = paragraph.insertContentControl();
+          let contentControl = paragraph.insertContentControl();
           contentControl.tag = uniqueId;
           contentControl.title = `paragraph ${paragraphCounter}`;
           
@@ -61,7 +92,6 @@ export async function analyzeDocument() {
           
           paragraphCounter++;
           paragraphsWithControls++;
-          // console.log(`Added control to paragraph ${i+1}: "${paragraph.text.substring(0, 30)}${paragraph.text.length > 30 ? '...' : ''}"`);
         } catch (error) {
           console.error(`Error processing paragraph ${i+1}:`, error);
         }
@@ -103,7 +133,6 @@ export async function analyzeDocument() {
           
           tableCounter++;
           tablesWithControls++;
-          // console.log(`Added control to table ${i+1}`);
         } catch (error) {
           console.error(`Error processing table ${i+1}:`, error);
         }
@@ -114,12 +143,35 @@ export async function analyzeDocument() {
       await context.sync();
       
       // Load all content controls after insertion for accurate ordering
-      contentItems.load("title, tag");
+      contentItems.load("title, tag, text");
+      await context.sync();
+      
+      // Update indexes based on the actual order of content controls in the document
+      const orderedControls = [];
+      for (let i = 0; i < contentItems.items.length; i++) {
+        const control = contentItems.items[i];
+        // Find this control in our existing controls array
+        const existingControl = controls.find(c => c.id === control.tag);
+        if (existingControl) {
+          existingControl.index = i; // Update the index to its current position
+          orderedControls.push(existingControl);
+        }
+      }
+      
+      // Replace controls array with the ordered one if we have all controls
+      if (orderedControls.length === controls.length) {
+        controls.length = 0;
+        controls.push(...orderedControls);
+      } else {
+        // Fall back to sorting by index
+        controls.sort((a, b) => a.index - b.index);
+      }
+      
+      // Restore the original tracking mode at the end
+      document.changeTrackingMode = originalTrackingMode;
       await context.sync();
     });
     
-    // Sort controls by their index to maintain document reading order
-    controls.sort((a, b) => a.index - b.index);
     return controls;
   } catch (error) {
     console.error("Error analyzing document:", error);
@@ -135,17 +187,30 @@ export async function deleteContext() {
     await Word.run(async (context) => {
       // Get all content controls in the document
       const contentControls = context.document.contentControls;
+      const document = context.document;
+      
+      // Store the current change tracking mode
+      document.load("changeTrackingMode");
       contentControls.load("tag");
       
       await context.sync();
       
       console.log(`Deleting ${contentControls.items.length} content controls`);
       
+      // Save the current tracking mode
+      const originalTrackingMode = document.changeTrackingMode;
+      
+      // Temporarily turn off change tracking for content control deletion
+      document.changeTrackingMode = "Off";
+      await context.sync();
+      
       // Delete all content controls but preserve their content
       for (let i = 0; i < contentControls.items.length; i++) {
         contentControls.items[i].delete(true); // true = keep content
       }
       
+      // Restore the original tracking mode
+      document.changeTrackingMode = originalTrackingMode;
       await context.sync();
     });
   } catch (error) {
@@ -186,6 +251,120 @@ export async function selectContentControlById(tagId) {
     return found;
   } catch (error) {
     console.error("Error selecting content control:", error);
+    return false;
+  }
+}
+
+/**
+ * Inserts a new paragraph between two content controls or at the end of the document
+ * @param {string} adjacentId - The ID of the content control to insert after, or null to insert at the end
+ * @param {string} text - The text for the new paragraph
+ * @returns {Promise<{id: string, success: boolean}>} - The ID of the new content control and success status
+ */
+export async function insertParagraphAfter(adjacentId, text = "") {
+  try {
+    let newId = null;
+    let success = false;
+    
+    await Word.run(async (context) => {
+      // First, make sure track changes is enabled
+      const document = context.document;
+      document.changeTrackingMode = "TrackAll";
+      
+      // Generate a unique ID for the new paragraph
+      const uniqueId = `para-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      
+      if (!adjacentId) {
+        // Insert at the end of the document if no adjacentId is provided
+        const paragraph = context.document.body.insertParagraph(text, Word.InsertLocation.end);
+        const contentControl = paragraph.insertContentControl();
+        contentControl.tag = uniqueId;
+        contentControl.title = `paragraph (inserted)`;
+        success = true;
+        newId = uniqueId;
+      } else {
+        // Find the content control with the specified ID
+        const contentControls = context.document.contentControls;
+        contentControls.load("tag");
+        
+        await context.sync();
+        
+        // Find the target content control
+        let targetControl = null;
+        for (let i = 0; i < contentControls.items.length; i++) {
+          if (contentControls.items[i].tag === adjacentId) {
+            targetControl = contentControls.items[i];
+            break;
+          }
+        }
+        
+        if (targetControl) {
+          // Insert paragraph after the found content control
+          const paragraph = targetControl.insertParagraph(text, Word.InsertLocation.after);
+          const contentControl = paragraph.insertContentControl();
+          contentControl.tag = uniqueId;
+          contentControl.title = `paragraph (inserted)`;
+          success = true;
+          newId = uniqueId;
+        }
+      }
+      
+      await context.sync();
+    });
+    
+    return { id: newId, success };
+  } catch (error) {
+    console.error("Error inserting paragraph:", error);
+    return { id: null, success: false };
+  }
+}
+
+/**
+ * Deletes a specific content control by its ID
+ * @param {string} tagId - The ID of the content control to delete
+ * @returns {Promise<boolean>} - True if successfully deleted, false otherwise
+ */
+export async function deleteContentControlById(tagId) {
+  try {
+    let success = false;
+    
+    await Word.run(async (context) => {
+      // First, make sure track changes is enabled
+      const document = context.document;
+      document.changeTrackingMode = "TrackAll";
+      
+      // Get all content controls in the document
+      const contentControls = context.document.contentControls;
+      contentControls.load("tag, type");
+      
+      await context.sync();
+      
+      // Find the content control with the matching tag
+      for (let i = 0; i < contentControls.items.length; i++) {
+        if (contentControls.items[i].tag === tagId) {
+          // Get the content within the content control
+          const range = contentControls.items[i].getRange();
+          range.load("text");
+          await context.sync();
+          
+          // Delete the content control preserving its contents
+          contentControls.items[i].delete(true);
+          await context.sync();
+          
+          // Now get the range which was previously in the content control and delete it (with track changes)
+          // This will show up as a deletion in review mode
+          range.delete();
+          success = true;
+          break;
+        }
+      }
+      
+      await context.sync();
+    });
+    
+    return success;
+  } catch (error) {
+    console.error("Error deleting content control:", error);
     return false;
   }
 } 

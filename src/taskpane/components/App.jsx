@@ -1,9 +1,13 @@
+/* global console */
+
 import * as React from "react";
 import PropTypes from "prop-types";
 import Header from "./Header";
 import { makeStyles } from "@fluentui/react-components";
-import { Button, Text, List, ListItem } from "@fluentui/react-components";
-import { analyzeDocument, deleteContext, selectContentControlById } from "../wordService";
+import { Button, Text, List, ListItem, Dialog, DialogSurface, 
+  DialogBody, DialogTitle, DialogContent, DialogActions, Textarea, Field } from "@fluentui/react-components";
+import { analyzeDocument, deleteContext, selectContentControlById, insertParagraphAfter, deleteContentControlById } from "../wordService";
+import { AddRegular, DeleteRegular } from "@fluentui/react-icons";
 
 const useStyles = makeStyles({
   root: {
@@ -56,6 +60,9 @@ const App = (props) => {
   const [contentControls, setContentControls] = React.useState([]);
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [activeItemId, setActiveItemId] = React.useState(null);
+  const [insertText, setInsertText] = React.useState("");
+  const [showInsertDialog, setShowInsertDialog] = React.useState(false);
+  const [currentInsertId, setCurrentInsertId] = React.useState(null);
 
   const handleAnalyzeDocument = async () => {
     try {
@@ -101,6 +108,49 @@ const App = (props) => {
     }
   };
 
+  const handleInsertAfter = (itemId) => {
+    setCurrentInsertId(itemId);
+    setInsertText("");
+    setShowInsertDialog(true);
+  };
+
+  const handleInsertConfirm = async () => {
+    try {
+      setIsProcessing(true);
+      const result = await insertParagraphAfter(currentInsertId, insertText);
+      
+      if (result.success) {
+        // Refresh document analysis to show the new paragraph
+        await handleAnalyzeDocument();
+        // Highlight the newly inserted paragraph
+        await selectContentControlById(result.id);
+        setActiveItemId(result.id);
+      }
+      
+      setShowInsertDialog(false);
+    } catch (error) {
+      console.error("Error inserting paragraph:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteItem = async (itemId) => {
+    try {
+      setIsProcessing(true);
+      const success = await deleteContentControlById(itemId);
+      
+      if (success) {
+        // Refresh the document analysis
+        await handleAnalyzeDocument();
+      }
+    } catch (error) {
+      console.error("Error deleting content control:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className={styles.root}>
       <Header logo="assets/logo-filled.png" title={title} message="Document Analysis Tool" />
@@ -129,23 +179,73 @@ const App = (props) => {
       {contentControls.length > 0 ? (
         <div className={styles.listContainer}>
           <List>
-            {contentControls.map((item) => (
-              <ListItem 
-                key={item.id} 
-                className={`${styles.listItem} ${activeItemId === item.id ? styles.activeItem : ''}`}
-                onClick={() => handleItemClick(item.id)}
-              >
-                <div>
-                  <Text weight="semibold">{item.title}: {item.id}</Text>
-                  <Text block>{item.text}</Text>
-                </div>
-              </ListItem>
+            {contentControls.map((item, index) => (
+              <React.Fragment key={item.id}>
+                <ListItem 
+                  className={`${styles.listItem} ${activeItemId === item.id ? styles.activeItem : ''}`}
+                  onClick={() => handleItemClick(item.id)}
+                >
+                  <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <Text weight="semibold">{item.title}: {item.id}</Text>
+                      <Text block>{item.text}</Text>
+                    </div>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <Button 
+                        icon={<AddRegular />}
+                        appearance="transparent"
+                        size="small" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleInsertAfter(item.id);
+                        }}
+                        disabled={isProcessing}
+                        title="Insert after"
+                      />
+                      <Button 
+                        icon={<DeleteRegular />}
+                        appearance="transparent"
+                        size="small" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteItem(item.id);
+                        }}
+                        disabled={isProcessing}
+                        title="Delete paragraph"
+                      />
+                    </div>
+                  </div>
+                </ListItem>
+              </React.Fragment>
             ))}
           </List>
         </div>
       ) : (
         <Text className={styles.noElements}>No analyzed elements yet. Click 'Analyse Document' to begin.</Text>
       )}
+
+      <Dialog open={showInsertDialog}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>Insert New Paragraph</DialogTitle>
+            <DialogContent>
+              <Field label="Enter paragraph text:">
+                <Textarea 
+                  value={insertText} 
+                  onChange={(e) => setInsertText(e.target.value)}
+                  style={{ width: '100%', minHeight: '100px' }}
+                />
+              </Field>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setShowInsertDialog(false)}>Cancel</Button>
+              <Button appearance="primary" onClick={handleInsertConfirm} disabled={isProcessing}>
+                Insert
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </div>
   );
 };
