@@ -53,8 +53,8 @@ export async function analyzeDocument() {
             id: control.tag,
             text: control.text,
             type: "paragraph",
-            index: i, // This will be corrected later
-            title: control.title
+            index: i,
+            title: ""
           });
           paragraphsWithControls++;
         }
@@ -80,14 +80,14 @@ export async function analyzeDocument() {
           const uniqueId = `para-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
           let contentControl = paragraph.insertContentControl();
           contentControl.tag = uniqueId;
-          contentControl.title = `paragraph ${paragraphCounter}`;
+          contentControl.appearance = "Hidden";
           
           controls.push({
             id: uniqueId,
             text: paragraph.text,
             type: "paragraph",
             index: i, // Save the original position
-            title: `paragraph ${paragraphCounter}`
+            title: "" // Empty title
           });
           
           paragraphCounter++;
@@ -112,7 +112,7 @@ export async function analyzeDocument() {
           const uniqueId = `table-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
           const contentControl = table.insertContentControl();
           contentControl.tag = uniqueId;
-          contentControl.title = `table ${tableCounter}`;
+          contentControl.appearance = "Hidden";
           
           // Get table content as a string representation
           let tableText = "Table with content: ";
@@ -128,7 +128,7 @@ export async function analyzeDocument() {
             text: tableText,
             type: "table",
             index: paragraphs.items.length + i, // Position after paragraphs
-            title: `table ${tableCounter}`
+            title: "" // Empty title
           });
           
           tableCounter++;
@@ -308,7 +308,7 @@ export async function insertParagraphAfter(adjacentId, text = "") {
         const paragraph = context.document.body.insertParagraph(text, Word.InsertLocation.end);
         const contentControl = paragraph.insertContentControl();
         contentControl.tag = uniqueId;
-        contentControl.title = `paragraph (inserted)`;
+        contentControl.appearance = "Hidden";
         success = true;
         newId = uniqueId;
       } else {
@@ -332,7 +332,7 @@ export async function insertParagraphAfter(adjacentId, text = "") {
           const paragraph = targetControl.insertParagraph(text, Word.InsertLocation.after);
           const contentControl = paragraph.insertContentControl();
           contentControl.tag = uniqueId;
-          contentControl.title = `paragraph (inserted)`;
+          contentControl.appearance = "Hidden";
           success = true;
           newId = uniqueId;
         }
@@ -427,9 +427,7 @@ export async function replaceParagraphContent(paraId, newContent) {
           
           // Set the text directly in the content control
           contentControl.insertText(newContent, Word.InsertLocation.replace);
-          
-          // Update the title to show it was modified
-          contentControl.title = `paragraph (modified)`;
+          contentControl.appearance = "Hidden";
           
           success = true;
           break;

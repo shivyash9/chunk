@@ -156,13 +156,15 @@ const useStyles = makeStyles({
 const App = (props) => {
   const { title } = props;
   const styles = useStyles();
-  const [contentControls, setContentControls] = React.useState([]);
+  const [rawContentControls, setRawContentControls] = React.useState([]);
+  const [sortedContentControls, setSortedContentControls] = React.useState([]);
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [activeItemId, setActiveItemId] = React.useState(null);
   const [insertText, setInsertText] = React.useState("");
   const [showInsertDialog, setShowInsertDialog] = React.useState(false);
   const [currentInsertId, setCurrentInsertId] = React.useState(null);
   const [analysisTime, setAnalysisTime] = React.useState(0);
+  const [forceRender, setForceRender] = React.useState(0);
   
   // State variables for paragraph ID search functionality
   const [searchParaId, setSearchParaId] = React.useState("");
@@ -174,6 +176,33 @@ const App = (props) => {
   // Tab state
   const [selectedTab, setSelectedTab] = React.useState("paragraphs");
   const [processingMessage, setProcessingMessage] = React.useState("");
+  
+  // Use layoutEffect to ensure sorting happens before paint
+  React.useLayoutEffect(() => {
+    if (rawContentControls && rawContentControls.length > 0) {
+      // Create a stable sort by using both index and id for tiebreakers
+      const sorted = [...rawContentControls].sort((a, b) => {
+        // First sort by index
+        if (a.index !== b.index) {
+          return a.index - b.index;
+        }
+        // If indexes are the same, sort by id to ensure stable order
+        return a.id.localeCompare(b.id);
+      });
+      
+      setSortedContentControls(sorted);
+      console.log("Content controls sorted with useLayoutEffect");
+    } else {
+      setSortedContentControls([]);
+    }
+  }, [rawContentControls, selectedTab, forceRender]);
+  
+  // Force re-render when tab is changed
+  const handleTabChange = (_, data) => {
+    setSelectedTab(data.value);
+    // Force a re-render and re-sort when tabs change
+    setForceRender(prev => prev + 1);
+  };
 
   const handleAnalyzeDocument = async () => {
     try {
@@ -191,10 +220,16 @@ const App = (props) => {
       
       // Then analyze the document
       const controls = await analyzeDocument();
-      setContentControls(controls);
+      console.log("Controls received:", controls);
+      
+      // Store the raw controls unmodified to ensure we don't accidentally sort twice
+      setRawContentControls(controls);
       
       const endTime = performance.now();
       setAnalysisTime((endTime - startTime) / 1000); // Convert to seconds
+      
+      // Force a re-render to ensure everything is sorted correctly
+      setForceRender(prev => prev + 1);
     } catch (error) {
       console.error("Error in handleAnalyzeDocument:", error);
       // Show an error message to the user
@@ -202,9 +237,9 @@ const App = (props) => {
       setTimeout(() => setProcessingMessage(""), 5000); // Clear message after 5 seconds
     } finally {
       setIsProcessing(false);
-      if (processingMessage === "Analyzing document...") {
+      // if (processingMessage === "Analyzing document...") {
         setProcessingMessage("");
-      }
+      // }
     }
   };
 
@@ -213,7 +248,7 @@ const App = (props) => {
       setIsProcessing(true);
       setProcessingMessage("Clearing context...");
       await deleteContext();
-      setContentControls([]);
+      setRawContentControls([]);
       setActiveItemId(null);
     } catch (error) {
       console.error("Error in handleDeleteContext:", error);
@@ -222,9 +257,9 @@ const App = (props) => {
       setTimeout(() => setProcessingMessage(""), 5000); // Clear message after 5 seconds
     } finally {
       setIsProcessing(false);
-      if (processingMessage === "Clearing context...") {
+      // if (processingMessage === "Clearing context...") {
         setProcessingMessage("");
-      }
+      // }
     }
   };
   
@@ -382,14 +417,14 @@ const App = (props) => {
       <div className={styles.contentArea}>
         <TabList 
           selectedValue={selectedTab}
-          onTabSelect={(_, data) => setSelectedTab(data.value)}
+          onTabSelect={handleTabChange}
           appearance="subtle"
         >
           <Tab value="paragraphs" icon={<DocumentBulletListRegular />}>
             Paragraphs
-            {contentControls.length > 0 && (
+            {sortedContentControls.length > 0 && (
               <Badge appearance="filled" className={styles.badge} size="small" color="brand">
-                {contentControls.length}
+                {sortedContentControls.length}
               </Badge>
             )}
           </Tab>
@@ -400,19 +435,19 @@ const App = (props) => {
 
         {selectedTab === "paragraphs" ? (
           <div className={styles.tabContent}>
-            {contentControls.length > 0 ? (
-              <div className={styles.listContainer}>
+            {sortedContentControls.length > 0 ? (
+              <div className={styles.listContainer} key={`list-container-${forceRender}`}>
                 <List>
-                  {contentControls.map((item) => (
+                  {sortedContentControls.map((item, idx) => (
                     <ListItem 
-                      key={item.id}
+                      key={`${item.id}-${idx}-${forceRender}`}
                       className={`${styles.listItem} ${activeItemId === item.id ? styles.activeItem : ''}`}
                       onClick={() => handleItemClick(item.id)}
                     >
                       <div className={styles.listItemContent}>
                         <div>
                           <Text weight="semibold" size={200} className={styles.ellipsis}>
-                            {item.title}: {item.id}
+                            {item.title}: {item.id} (idx: {item.index})
                           </Text>
                           <Text block size={300}>{item.text}</Text>
                         </div>
