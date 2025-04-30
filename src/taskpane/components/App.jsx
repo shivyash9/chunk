@@ -157,14 +157,12 @@ const App = (props) => {
   const { title } = props;
   const styles = useStyles();
   const [rawContentControls, setRawContentControls] = React.useState([]);
-  const [sortedContentControls, setSortedContentControls] = React.useState([]);
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [activeItemId, setActiveItemId] = React.useState(null);
   const [insertText, setInsertText] = React.useState("");
   const [showInsertDialog, setShowInsertDialog] = React.useState(false);
   const [currentInsertId, setCurrentInsertId] = React.useState(null);
   const [analysisTime, setAnalysisTime] = React.useState(0);
-  const [forceRender, setForceRender] = React.useState(0);
   
   // State variables for paragraph ID search functionality
   const [searchParaId, setSearchParaId] = React.useState("");
@@ -176,32 +174,27 @@ const App = (props) => {
   // Tab state
   const [selectedTab, setSelectedTab] = React.useState("paragraphs");
   const [processingMessage, setProcessingMessage] = React.useState("");
-  
-  // Use layoutEffect to ensure sorting happens before paint
-  React.useLayoutEffect(() => {
-    if (rawContentControls && rawContentControls.length > 0) {
-      // Create a stable sort by using both index and id for tiebreakers
-      const sorted = [...rawContentControls].sort((a, b) => {
-        // First sort by index
-        if (a.index !== b.index) {
-          return a.index - b.index;
-        }
-        // If indexes are the same, sort by id to ensure stable order
-        return a.id.localeCompare(b.id);
-      });
-      
-      setSortedContentControls(sorted);
-      console.log("Content controls sorted with useLayoutEffect");
-    } else {
-      setSortedContentControls([]);
+
+  // Memoize the sorted content controls
+  const sortedContentControls = React.useMemo(() => {
+    if (!rawContentControls || rawContentControls.length === 0) {
+      return [];
     }
-  }, [rawContentControls, selectedTab, forceRender]);
+    
+    // Create a stable sort by using both index and id for tiebreakers
+    return [...rawContentControls].sort((a, b) => {
+      // First sort by index
+      if (a.index !== b.index) {
+        return a.index - b.index;
+      }
+      // If indexes are the same, sort by id to ensure stable order
+      return a.id.localeCompare(b.id);
+    });
+  }, [rawContentControls]);
   
   // Force re-render when tab is changed
   const handleTabChange = (_, data) => {
     setSelectedTab(data.value);
-    // Force a re-render and re-sort when tabs change
-    setForceRender(prev => prev + 1);
   };
 
   const handleAnalyzeDocument = async () => {
@@ -227,9 +220,6 @@ const App = (props) => {
       
       const endTime = performance.now();
       setAnalysisTime((endTime - startTime) / 1000); // Convert to seconds
-      
-      // Force a re-render to ensure everything is sorted correctly
-      setForceRender(prev => prev + 1);
     } catch (error) {
       console.error("Error in handleAnalyzeDocument:", error);
       // Show an error message to the user
@@ -304,19 +294,20 @@ const App = (props) => {
 
   const handleDeleteItem = async (itemId) => {
     try {
-      setIsProcessing(true);
-      setProcessingMessage("Deleting paragraph...");
       const success = await deleteContentControlById(itemId);
       
       if (success) {
-        // Refresh the document analysis
-        await handleAnalyzeDocument();
+        // Update local state by filtering out the deleted item
+        setRawContentControls(prevControls => 
+          prevControls.filter(control => control.id !== itemId)
+        );
+        // Clear active item if it was the deleted one
+        if (activeItemId === itemId) {
+          setActiveItemId(null);
+        }
       }
     } catch (error) {
       console.error("Error deleting content control:", error);
-    } finally {
-      setIsProcessing(false);
-      setProcessingMessage("");
     }
   };
 
@@ -434,11 +425,11 @@ const App = (props) => {
         {selectedTab === "paragraphs" ? (
           <div className={styles.tabContent}>
             {sortedContentControls.length > 0 ? (
-              <div className={styles.listContainer} key={`list-container-${forceRender}`}>
+              <div className={styles.listContainer} key={`list-container`}>
                 <List>
                   {sortedContentControls.map((item, idx) => (
                     <ListItem 
-                      key={`${item.id}-${idx}-${forceRender}`}
+                      key={`${item.id}-${idx}`}
                       className={`${styles.listItem} ${activeItemId === item.id ? styles.activeItem : ''}`}
                       onClick={() => handleItemClick(item.id)}
                     >
