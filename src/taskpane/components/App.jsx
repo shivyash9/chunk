@@ -237,9 +237,7 @@ const App = (props) => {
       setTimeout(() => setProcessingMessage(""), 5000); // Clear message after 5 seconds
     } finally {
       setIsProcessing(false);
-      // if (processingMessage === "Analyzing document...") {
-        setProcessingMessage("");
-      // }
+      setProcessingMessage("");
     }
   };
 
